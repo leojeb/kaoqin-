@@ -2,6 +2,7 @@ import datetime
 
 import pandas as pd
 import datetime as dt
+from datetime import timedelta
 from decimal import *
 
 # 定义两个list分别存储所有休息日和节日当天(计算三倍工资)
@@ -35,7 +36,7 @@ print(yj.head(100).to_string())
 # 删除每个人日期为'总计'的那一行
 
 # 1. 首先我们删除不需要的列
-result1 = mj.loc[:, ['姓名', '部门' ,'日期', '关联的审批单']]
+result1 = mj.loc[:, ['姓名', '部门' ,'日期', '关联的审批单', '班次']]
 # result2 = yj.loc[:, ['姓名', '考勤日期', '打卡备注', '打卡时间', '打卡结果', '打卡地址']]
 
 # 2. 把时间做个平移, 对打卡时间每一单元格数据做判断然后改变日期, 然后对打卡时间排序
@@ -113,6 +114,7 @@ result = pd.DataFrame({
     "部门": mj.loc[:, "部门"],
     "日期": mj.loc[:, "日期"],
     "关联的审批单": mj.loc[:, "关联的审批单"],
+    "班次": mj.loc[:,"班次"]
 })
 
 shenpi = 审批单.join(result.set_index(["姓名", "日期"]), on=["姓名", "日期"])
@@ -191,9 +193,11 @@ list_jiaban_T = []
 # 获取一些后面要用的量
 wudian = dt.timedelta(hours=5)
 zao = dt.timedelta(hours=9, minutes=30)
+zao1 = dt.timedelta(hours=8, minutes=30)
 lunch_start = dt.timedelta(hours=12)
 lunch_end = dt.timedelta(hours=13)
 wan = dt.timedelta(hours=18, minutes=30)
+wan1 = dt.timedelta(hours=17, minutes=30)
 dinner_start = dt.timedelta(hours=18, minutes=30)
 dinner_end = dt.timedelta(hours=19, minutes=30)
 
@@ -204,6 +208,7 @@ for i, rows in daka_note_result.iterrows():
     # print(11111111111111111111111111, daka_note_result.iloc[i, "日期"])
     riqi = str(daka_note_result.loc[i, "日期"])
     datestr = riqi.split(" ")[0]
+    banci = daka_note_result.loc[i,'班次']
     try:
         date = dt.datetime.strptime(datestr, "%y-%m-%d")
     except Exception:
@@ -293,7 +298,7 @@ for i, rows in daka_note_result.iterrows():
                 elif sbT >= dinner_end:
                     jiaban_T = work_time1
 
-                jiaban_T_formatted = Decimal(jiaban_T).quantize(Decimal("0.00"))
+                jiaban_T_formatted = float(Decimal(jiaban_T).quantize(Decimal("0.00")))
                 list_jiaban_T.append(jiaban_T_formatted)
 
                 if datestr in list_holiday:
@@ -327,13 +332,31 @@ for i, rows in daka_note_result.iterrows():
                         daka_note_result.loc[i, "下班打卡地址"] = ""
                 list_jiaban.append("")
                 list_jiaban_T.append(0.00)
-            elif work_time1 >= 11.50:
-                list_jiaban.append("是")
-
-                list_jiaban_T.append(Decimal(work_time1 - 9.00).quantize(Decimal("0.00")))
             else:
-                list_jiaban.append("")
-                list_jiaban_T.append(Decimal(work_time1 - 9.00).quantize(Decimal("0.00")))
+                # 迟到早退一小时以上视作缺卡
+                if '08:30' in banci:
+                    if sbT > (zao1 + timedelta(hours=1)):
+                        daka_note_result.loc[i, "上班打卡结果"] = "缺卡"
+                    if xbT < (wan1 - timedelta(hours=1)):
+                        daka_note_result.loc[i, "下班打卡结果"] = "缺卡"
+
+                elif '09:30' in banci:
+                    if sbT > (zao + timedelta(hours=1)):
+                        daka_note_result.loc[i, "上班打卡结果"] = "缺卡"
+                    if xbT < (wan - timedelta(hours=1)):
+                        daka_note_result.loc[i, "下班打卡结果"] = "缺卡"
+
+                if work_time1 >= 11.50:
+                    list_jiaban.append("是")
+                    list_jiaban_T.append(float(Decimal(work_time1 - 9.00).quantize(Decimal("0.00"))))
+                else:
+                    list_jiaban.append("")
+                    if work_time1 > 9.00:
+                        list_jiaban_T.append(float(Decimal(work_time1 - 9.00).quantize(Decimal("0.00"))))
+                    else:
+                        list_jiaban_T.append(0.00)
+
+
 
         # 2. 打卡时间全部改成只有小时数
         sbT1 = daka_note_result.loc[i, "上班打卡时间"]
@@ -375,6 +398,7 @@ s3_jiaban_T = pd.Series(list_jiaban_T, name="加班时长")
 print(len(s1_jiaban), "-----加班")
 print(len(s2_zhoumo), "-----周末")
 final_result = pd.concat([daka_note_result, s3_jiaban_T, s1_jiaban, s2_zhoumo], axis=1)
+print(final_result.columns.tolist())
 # print(final_result.to_string())
 # print(len(final_result))
 
@@ -431,6 +455,52 @@ formatted_kaoqin = pd.DataFrame({
     "是否计算周末加班费": final_result["是否计算周末加班费"]
 })
 
+jiaban_T_form = pd.DataFrame({
+    "姓名": final_result["姓名"],
+    "部门": final_result["部门"],
+    "工作时长(小时)": final_result["工作时长"],
+    # "上班打卡时间": final_result["上班打卡时间"],
+    # "上班打卡结果": final_result["上班打卡结果"],
+    # "上班打卡地址": final_result["上班打卡地址"],
+    # "下班打卡时间": final_result["下班打卡时间"],
+    # "下班打卡结果": final_result["下班打卡结果"],
+    # "下班打卡地址": final_result["下班打卡地址"],
+    "加班时长(小时)": final_result["加班时长"],
+})
+jiaban_T_form = jiaban_T_form[['技术中心' in c for c in list(jiaban_T_form['部门'])]]
+grouped = jiaban_T_form.groupby(['部门','姓名'])
+sum1 = grouped.sum()
+print('sum1',len(sum1))
+rank = sum1.rank(ascending=False, pct = True)
+print('rank',len(rank))
+last20pct = rank[[i > 0.80 for i in list(rank['加班时长(小时)'])]]
+for i, ele in enumerate(last20pct['加班时长(小时)']):
+    last20pct['加班时长(小时)'][i] = float(Decimal(last20pct['加班时长(小时)'][i]).quantize(Decimal("0.00")))
+last20pct = pd.DataFrame(
+    {
+        # "姓名": last20pct["姓名"],
+        # "部门": last20pct["部门"],
+        "加班时长百分比排名": last20pct["加班时长(小时)"],
+    }
+)
+print('last20pct',len(last20pct))
+
+grouped_by_dept = jiaban_T_form.groupby('部门')
+# for i in grouped_by_dept:
+
+sum_by_dept = grouped_by_dept.sum().sort_values(by=['加班时长(小时)'])
+for i, rows in sum_by_dept.iterrows():
+    sum_by_dept.loc[i,'加班时长(小时)'] = sum_by_dept.loc[i,'加班时长(小时)']/len(sum1.loc[i])
+
+    sum_by_dept.loc[i, '加班时长(小时)'] = Decimal(sum_by_dept.loc[i, '加班时长(小时)']).quantize(Decimal("0.00"))
+
+sum_by_dept = sum_by_dept.sort_values(by=['加班时长(小时)'])
+
+print('sum_by_dept',len(sum_by_dept))
+rank_by_dept = sum_by_dept.rank(ascending=True).sort_values(by=['加班时长(小时)'])
+print('rank_by_dept',len(rank_by_dept))
+# dept = rank[[i > 0.80 for i in list(rank['加班时长(小时)'])]]
+
 
 formatted_weekend = pd.DataFrame({
     # "部门": weekend_work["部门"],
@@ -453,6 +523,7 @@ formatted_weekend = pd.DataFrame({
     # 这里weekend的index是过滤后的不连续的index, 我们改成range(len(weekend_work))从0开始
 })
 
+
 print(len(weekend_work))
 # Create a Pandas Excel writer using XlsxWriter as the engine.
 writer = pd.ExcelWriter(f"{dir1}\考勤总表.xlsx", engine='xlsxwriter')
@@ -461,6 +532,8 @@ writer = pd.ExcelWriter(f"{dir1}\考勤总表.xlsx", engine='xlsxwriter')
 
 formatted_kaoqin.to_excel(writer, sheet_name='考勤表')
 formatted_weekend.to_excel(writer, sheet_name='休息日出勤总表')
+last20pct.to_excel(writer, sheet_name='加班时长个人排名后20%')
+sum_by_dept.to_excel(writer, sheet_name='加班时长部门排名')
 # weekend_groupby_dept = formatted_weekend.groupby(['部门'], as_index=False)
 # 按照部门分组后输出为不同的excel表格,
 # for name, group in weekend_groupby_dept:
@@ -488,10 +561,13 @@ cell_format6 = workbook.add_format(
 
 worksheet = writer.sheets['考勤表']
 worksheet1 = writer.sheets['休息日出勤总表']
+worksheet2 = writer.sheets['加班时长个人排名后20%']
+worksheet3 = writer.sheets['加班时长部门排名']
 # 设置两个表的格式
 worksheet.set_row(0, 20, format_biaoti)
 worksheet1.set_row(0, 20, format_biaoti)
 for i, row in formatted_kaoqin.iterrows():
+
     worksheet.set_row(i + 1, 35, format)  # 设置行高和居中
     sb_daka_res = formatted_kaoqin.loc[i, "上班打卡结果"]
     xb_daka_res = formatted_kaoqin.loc[i, "下班打卡结果"]
@@ -568,6 +644,12 @@ worksheet.set_column('E:O', 18, None)
 worksheet.set_column('B:B', 12, None)
 worksheet.set_column('C:C', 18, None)
 worksheet.set_column('D:D', 15, None)
+
+worksheet2.set_column('A:A', 40, None)
+worksheet2.set_column('B:B', 20, None)
+worksheet3.set_column('A:A', 40, None)
+worksheet3.set_column('B:B', 20, None)
+# worksheet.set_column('C:C', 18, None)
 
 worksheet1.set_column('E:P', 18, None)
 worksheet1.set_column('B:B', 8, None)
