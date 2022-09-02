@@ -1,18 +1,28 @@
 import datetime
 
 import pandas as pd
+from pandas import DataFrame
 import datetime as dt
 from datetime import timedelta
 from decimal import *
 
 # 定义两个list分别存储所有休息日和节日当天(计算三倍工资)
-list_dayoff = ["22-06-11", "22-06-12", "22-06-18", "22-06-19","22-06-03","22-06-04","22-06-05", "22-06-25", "22-06-26"]
+list_dayoff = [
+    "2022-08-06", 
+    "2022-08-07", 
+    "2022-08-13", 
+    "2022-08-14", 
+    "2022-08-20", 
+    "2022-08-21", 
+    "2022-08-27", 
+    "2022-08-28", 
+    ]
 
 list_holiday = ["22-06-03","22-06-04","22-06-05"]
 
-dir1 = "D:\work\考勤\\202206"
-yuan_jilu = pd.read_excel(f"{dir1}\安徽酷哇机器人有限公司_原始记录表_20220601-20220630.xlsx")
-meir_jilu = pd.read_excel(f"{dir1}\安徽酷哇机器人有限公司_每日统计表_20220601-20220630.xlsx")
+dir1 = "D:\work\考勤\\2022-08"
+yuan_jilu = pd.read_excel(f"{dir1}\安徽酷哇机器人有限公司_原始记录表_20220801-20220831.xlsx")
+meir_jilu = pd.read_excel(f"{dir1}\安徽酷哇机器人有限公司_每日统计表_20220801-20220831.xlsx")
 
 
 yj = yuan_jilu
@@ -25,7 +35,7 @@ writer1 = pd.ExcelWriter(f"{dir1}\过滤考勤总表.xlsx", engine='xlsxwriter')
 mj1.to_excel(writer1)
 writer1.save()
 
-mj = pd.read_excel(f"{dir1}\过滤考勤总表.xlsx")
+mj: DataFrame = pd.read_excel(f"{dir1}\过滤考勤总表.xlsx")
 for index, row in mj.iterrows():
     if row['日期'] == '总计':
         print('无效啊  111111111111111111111111111')
@@ -77,7 +87,12 @@ for i in range(len(yj_time)):
         weekday = "星期日"
 
     # 全部转换成datetime对象, 方便排序和相减求工作时长
-    yj_date.iloc[i] = date.strftime("%y-%m-%d") + " " + weekday
+    # yj_date.iloc[i] = date.strftime("%y/%m/%d") + " " + weekday
+    # if '/' in str(yj_date.iloc[i]):
+    #     yj_date.iloc[i] = date.strftime("%y/%m/%d")
+    # elif '-' in str(yj_date.iloc[i]):
+    yj_date.iloc[i] = date.strftime("%Y-%m-%d")
+    
     yj_time.iloc[i] = dt.datetime.strptime(daka_date + " " + str(hour) + ":" + minute, "%Y-%m-%d %H:%M")
 
 # 3. 按照姓名和日期分组, 求第一次打卡时间和最后一次打卡时间, 并计算工作时间
@@ -109,12 +124,15 @@ result = pd.DataFrame({
 # print(result.index)
 # print(result.to_string())
 # 5. 关联审批单
+mj_date = mj.loc[:,'日期']
+mj_date = [ str(datestr).split(' ')[0] for datestr in mj_date  ]
+
 审批单 = pd.DataFrame({
     "姓名": mj.loc[:, "姓名"],
     "部门": mj.loc[:, "部门"],
-    "日期": mj.loc[:, "日期"],
+    "日期": mj_date,
     "关联的审批单": mj.loc[:, "关联的审批单"],
-    "班次": mj.loc[:,"班次"]
+    "班次": mj.loc[:,"班次"].replace()
 })
 
 shenpi = 审批单.join(result.set_index(["姓名", "日期"]), on=["姓名", "日期"])
@@ -193,11 +211,15 @@ list_jiaban_T = []
 # 获取一些后面要用的量
 wudian = dt.timedelta(hours=5)
 zao = dt.timedelta(hours=9, minutes=30)
+zao0 = dt.timedelta(hours=9)
 zao1 = dt.timedelta(hours=8, minutes=30)
+zao2 = dt.timedelta(hours=8) # 8:00
 lunch_start = dt.timedelta(hours=12)
 lunch_end = dt.timedelta(hours=13)
 wan = dt.timedelta(hours=18, minutes=30)
+wan0 = dt.timedelta(hours=18)
 wan1 = dt.timedelta(hours=17, minutes=30)
+wan2 = dt.timedelta(hours=17)
 dinner_start = dt.timedelta(hours=18, minutes=30)
 dinner_end = dt.timedelta(hours=19, minutes=30)
 
@@ -210,7 +232,7 @@ for i, rows in daka_note_result.iterrows():
     datestr = riqi.split(" ")[0]
     banci = daka_note_result.loc[i,'班次']
     try:
-        date = dt.datetime.strptime(datestr, "%y-%m-%d")
+        date = dt.datetime.strptime(datestr, "%Y-%m-%d")
     except Exception:
         print(datestr, "     ", riqi )
         print(i,"是异常行")
@@ -334,17 +356,20 @@ for i, rows in daka_note_result.iterrows():
                 list_jiaban_T.append(0.00)
             else:
                 # 迟到早退一小时以上视作缺卡
-                if '08:30' in banci:
-                    if sbT > (zao1 + timedelta(hours=1)):
-                        daka_note_result.loc[i, "上班打卡结果"] = "缺卡"
-                    if xbT < (wan1 - timedelta(hours=1)):
-                        daka_note_result.loc[i, "下班打卡结果"] = "缺卡"
+                from BanciEnum import banci_dict
 
-                elif '09:30' in banci:
-                    if sbT > (zao + timedelta(hours=1)):
-                        daka_note_result.loc[i, "上班打卡结果"] = "缺卡"
-                    if xbT < (wan - timedelta(hours=1)):
-                        daka_note_result.loc[i, "下班打卡结果"] = "缺卡"
+                for k in banci_dict:
+                    if k in banci:
+                        zao = banci_dict[k][0]
+                        wan = banci_dict[k][1]
+                        if sbT > (zao + timedelta(hours=1)):
+                            daka_note_result.loc[i, "上班打卡结果"] = "缺卡"
+                        if xbT < (wan - timedelta(hours=1)):
+                            daka_note_result.loc[i, "下班打卡结果"] = "缺卡"
+                        break
+
+
+
 
                 if work_time1 >= 11.50:
                     list_jiaban.append("是")
@@ -420,15 +445,15 @@ def keeprow(df):
     for i, row in df.iterrows():
         # print(i, type(riqi.loc[i]), riqi.loc[i])
 
-        datastr = ''
-        if '星期' in str(riqi.loc[i]):
-            datestr = riqi.loc[i].split(" ")[0]
-        else:
-            print(False, '-----------------')
-            list_boolean.append(False)
-            continue
+        datestr = riqi.loc[i]
+        if '星期' in str(datestr):
+            datestr = datestr.split(" ")[0]
+        # else:
+        #     print(False, '-----------------')
+        #     list_boolean.append(False)
+        #     continue
         # date = dt.datetime.strptime(datestr, "%y-%m-%d")
-        boolean = (str(df['工作时长'].loc[i]) != "NaT") and (datestr in list_dayoff)
+        boolean = (str(df['工作时长'].loc[i]) != "NaT") and (str(datestr) in list_dayoff)
         list_boolean.append(boolean)
     return list_boolean
 
@@ -467,9 +492,12 @@ jiaban_T_form = pd.DataFrame({
     # "下班打卡地址": final_result["下班打卡地址"],
     "加班时长(小时)": final_result["加班时长"],
 })
-jiaban_T_form = jiaban_T_form[['技术中心' in c for c in list(jiaban_T_form['部门'])]]
+jiaban_T_form = jiaban_T_form[['技术中心' in str(c) for c in list(jiaban_T_form['部门'])]]
 grouped = jiaban_T_form.groupby(['部门','姓名'])
+
+# grouped.grouper
 sum1 = grouped.sum()
+
 print('sum1',len(sum1))
 rank = sum1.rank(ascending=False, pct = True)
 print('rank',len(rank))
@@ -486,12 +514,15 @@ last20pct = pd.DataFrame(
 print('last20pct',len(last20pct))
 
 grouped_by_dept = jiaban_T_form.groupby('部门')
-# for i in grouped_by_dept:
+# 对每个员工, 按照上班天数进行加权平均, 用  员工平均日加班时长*30  作为  月加班时长
+for i, row in sum1.iterrows():
+    sum1[i,'上班天数'] = len(grouped.get_group(i))
+    sum1[i,'加班时长(小时)'] = sum1['加班时长(小时)'] * 30 / sum1[i, '上班天数']
 
 sum_by_dept = grouped_by_dept.sum().sort_values(by=['加班时长(小时)'])
+
 for i, rows in sum_by_dept.iterrows():
     sum_by_dept.loc[i,'加班时长(小时)'] = sum_by_dept.loc[i,'加班时长(小时)']/len(sum1.loc[i])
-
     sum_by_dept.loc[i, '加班时长(小时)'] = Decimal(sum_by_dept.loc[i, '加班时长(小时)']).quantize(Decimal("0.00"))
 
 sum_by_dept = sum_by_dept.sort_values(by=['加班时长(小时)'])
@@ -523,6 +554,8 @@ formatted_weekend = pd.DataFrame({
     # 这里weekend的index是过滤后的不连续的index, 我们改成range(len(weekend_work))从0开始
 })
 
+my_dept = formatted_kaoqin[['云与智能网联' in str(bumen) for bumen in formatted_kaoqin['部门']]]
+my_dept_weekend = formatted_weekend[['云与智能网联' in str(bumen) for bumen in formatted_weekend['部门']]]
 
 print(len(weekend_work))
 # Create a Pandas Excel writer using XlsxWriter as the engine.
@@ -534,6 +567,8 @@ formatted_kaoqin.to_excel(writer, sheet_name='考勤表')
 formatted_weekend.to_excel(writer, sheet_name='休息日出勤总表')
 last20pct.to_excel(writer, sheet_name='加班时长个人排名后20%')
 sum_by_dept.to_excel(writer, sheet_name='加班时长部门排名')
+my_dept.to_excel(writer, sheet_name='云与智能网联考勤')
+my_dept_weekend.to_excel(writer, sheet_name='云与智能网联休息日考勤')
 # weekend_groupby_dept = formatted_weekend.groupby(['部门'], as_index=False)
 # 按照部门分组后输出为不同的excel表格,
 # for name, group in weekend_groupby_dept:
@@ -563,6 +598,9 @@ worksheet = writer.sheets['考勤表']
 worksheet1 = writer.sheets['休息日出勤总表']
 worksheet2 = writer.sheets['加班时长个人排名后20%']
 worksheet3 = writer.sheets['加班时长部门排名']
+worksheet4 = writer.sheets['云与智能网联考勤']
+worksheet5 = writer.sheets['云与智能网联休息日考勤']
+
 # 设置两个表的格式
 worksheet.set_row(0, 20, format_biaoti)
 worksheet1.set_row(0, 20, format_biaoti)
@@ -577,27 +615,27 @@ for i, row in formatted_kaoqin.iterrows():
         worksheet.set_row(i + 1, 35, cell_format1)
     # 补卡审批, 单元格标绿
     if "补卡" in shenpidan:
-        worksheet.write(i + 1, 4, shenpidan, cell_format2)
+        worksheet.write(i + 1, 5, shenpidan, cell_format2)
     if sb_daka_res == "补卡审批通过":
-        worksheet.write(i + 1, 6, sb_daka_res, cell_format2)
+        worksheet.write(i + 1, 7, sb_daka_res, cell_format2)
     if xb_daka_res == "补卡审批通过":
-        worksheet.write(i + 1, 9, xb_daka_res, cell_format2)
+        worksheet.write(i + 1, 10, xb_daka_res, cell_format2)
     # 迟到单元格标蓝
     if sb_daka_res == "迟到":
-        worksheet.write(i + 1, 6, sb_daka_res, cell_format3)
-    if xb_daka_res == "迟到":
-        worksheet.write(i + 1, 9, xb_daka_res, cell_format3)
+        worksheet.write(i + 1, 7, sb_daka_res, cell_format3)
+    if xb_daka_res == "早退":
+        worksheet.write(i + 1, 10, xb_daka_res, cell_format3)
     # 请假, 标棕色
     if "假" in shenpidan:
-        worksheet.write(i + 1, 4, shenpidan, cell_format4)
+        worksheet.write(i + 1, 5, shenpidan, cell_format4)
     if sb_daka_res == "请假" or sb_daka_res == "调休":
-        worksheet.write(i + 1, 6, sb_daka_res, cell_format4)
+        worksheet.write(i + 1, 7, sb_daka_res, cell_format4)
     if xb_daka_res == "请假" or xb_daka_res == "调休":
-        worksheet.write(i + 1, 9, xb_daka_res, cell_format4)
+        worksheet.write(i + 1, 10, xb_daka_res, cell_format4)
     if sb_daka_res == "外勤":
-        worksheet.write(i + 1, 6, sb_daka_res, cell_format6)
+        worksheet.write(i + 1, 7, sb_daka_res, cell_format6)
     if xb_daka_res == "外勤":
-        worksheet.write(i + 1, 9, xb_daka_res, cell_format6)
+        worksheet.write(i + 1, 10, xb_daka_res, cell_format6)
     # worksheet1.write(index1, 4, shenpidan, format1) 会完全覆盖, 所以颜色也会消失..那就算了把
 # print(formatted_weekend.loc[10, "上班打卡结果"],formatted_weekend.loc[10, "上班打卡结果"].__class__.__name__)
 
@@ -613,27 +651,27 @@ for j in list_index:
         worksheet1.set_row(index1, 35, cell_format1)
     # 补卡审批, 单元格标绿
     if "补卡" in shenpidan:
-        worksheet1.write(index1, 4, shenpidan, cell_format2)
+        worksheet1.write(index1, 5, shenpidan, cell_format2)
     if sb_daka_res == "补卡审批通过":
-        worksheet1.write(index1, 6, sb_daka_res, cell_format2)
+        worksheet1.write(index1, 7, sb_daka_res, cell_format2)
     if xb_daka_res == "补卡审批通过":
-        worksheet1.write(index1, 9, xb_daka_res, cell_format2)
+        worksheet1.write(index1, 10, xb_daka_res, cell_format2)
     # 迟到单元格标蓝
     if sb_daka_res == "迟到":
-        worksheet1.write(index1, 6, sb_daka_res, cell_format3)
+        worksheet1.write(index1, 7, sb_daka_res, cell_format3)
     if xb_daka_res == "迟到":
-        worksheet1.write(index1, 9, xb_daka_res, cell_format3)
+        worksheet1.write(index1, 10, xb_daka_res, cell_format3)
     # 请假, 标棕色
     if "假" in shenpidan:
-        worksheet1.write(index1, 4, shenpidan, cell_format4)
+        worksheet1.write(index1, 5, shenpidan, cell_format4)
     if sb_daka_res == "请假" or sb_daka_res == "调休":
-        worksheet1.write(index1, 6, sb_daka_res, cell_format4)
+        worksheet1.write(index1, 7, sb_daka_res, cell_format4)
     if xb_daka_res == "请假" or xb_daka_res == "调休":
-        worksheet1.write(index1, 9, xb_daka_res, cell_format4)
+        worksheet1.write(index1, 10, xb_daka_res, cell_format4)
     if sb_daka_res == "外勤":
-        worksheet1.write(index1, 6, sb_daka_res, cell_format6)
+        worksheet1.write(index1, 7, sb_daka_res, cell_format6)
     if xb_daka_res == "外勤":
-        worksheet1.write(index1, 9, xb_daka_res, cell_format6)
+        worksheet1.write(index1, 10, xb_daka_res, cell_format6)
 
 # Note: It isn't possible to format any cyj.loc[i, ["姓名e, "部门lls that already have a format such
 # as the index or headers or any cells that contain dates or datetimes.
